@@ -2,12 +2,12 @@ program zmat_maker
 
   use simpose
   use fundamental_constants
-  use cmdline_arguments
+  use cmdline_arguments, only: get_options, bad_options, have_args, option_exists, has_value, get_value, assignment(=), next_arg
   use mol2_class
   use quaternion_class
   use rotmatrix_class
-  use zmatrix_class
-  use file_functions, only: stderr, stdout, log, delete
+  use zmatrix_class, only: zmatrix_object, assignment(=), as_xyz, as_zmatrix, print
+  use file_functions, only: stderr, stdout, log, delete_file => delete
   use string_functions, only: join
   use iso_varying_string
   use variable_array
@@ -15,6 +15,14 @@ program zmat_maker
   implicit none
 
   !! $Log: zmat_maker.f90,v $
+  !! Revision 1.4  2008/07/04 05:08:26  aidan
+  !! Added the ability to automatically determine 'location' and 'type' in the
+  !! unit cell and write this information to the qxyz file. Now this file will
+  !! function as a map file to convert between my mol2 based contact files and
+  !! Darren's system which is based on z-matrices, locations and molecule types
+  !!
+  !! Removed the templating stuff temporarily.
+  !!
   !! Revision 1.3  2007/02/12 03:48:25  aidan
   !! Big code clean up. Took the fitting routine out into a separate function.
   !! Removed unused variables. Added command line arguments.
@@ -30,7 +38,7 @@ program zmat_maker
   ! The 'ident' command can extract this version string from an
   ! object file or executable, which means one can identify which
   ! version of the module was used to compile it.
-  character(len=*), parameter :: version = "$Id: zmat_maker.f90,v 1.3 2007/02/12 03:48:25 aidan Exp $"
+  character(len=*), parameter :: version = "$Id: zmat_maker.f90,v 1.4 2008/07/04 05:08:26 aidan Exp $"
 
   type (mol2_object)    :: mol2
   type (zmatrix_object) :: zmat(100), zmat_template
@@ -45,6 +53,8 @@ program zmat_maker
   character(len=1000)   :: fname, outname, buffer
   type (varying_string) :: myoptions(4)
 
+  logical, parameter :: debug = .FALSE. !.TRUE.
+
   type location
      real :: coords(3)
      integer, pointer :: zmats(:), number(:)
@@ -58,6 +68,7 @@ program zmat_maker
   myoptions(2) = 'rsd'
   myoptions(3) = 'quiet'
   myoptions(4) = 'locationtol'
+  ! myoptions(5) = 'template'
 
   ! This call parses the command line arguments for command line options
   call get_options(myoptions, error)
@@ -106,23 +117,23 @@ program zmat_maker
      end if
      loc_coincident = get_value('locationtol')
   else
-     loc_coincident = 4.
+     loc_coincident = 1.
   end if
 
-!!$  ! See if we have specified a template z-matrix file
-!!$  if (option_exists('template')) then
-!!$     ! Make sure we have a value
-!!$     if (.NOT. has_value('template')) then
-!!$        write(stderr,*) 'Must specify a filename with the option template!'
-!!$        call usage
-!!$        stop
-!!$     end if
-!!$     fname = get_value('template')
-!!$     zmat_template = fname
-!!$     have_template = .TRUE.
-!!$  else
-!!$     have_template = .FALSE.
-!!$  end if
+  ! See if we have specified a template z-matrix file
+  if (option_exists('template')) then
+     ! Make sure we have a value
+     if (.NOT. has_value('template')) then
+        write(stderr,*) 'Must specify a filename with the option template!'
+        call usage
+        stop
+     end if
+     fname = get_value('template')
+     zmat_template = fname
+     have_template = .TRUE.
+  else
+     have_template = .FALSE.
+  end if
 
   ! Grab the mol2 file name from the command line
   fname = next_arg()
@@ -144,11 +155,13 @@ program zmat_maker
 
   ! Delete an existing quaternion output file (ignoring an error 
   ! if one did not already exist)
-  call delete(trim(outname),error)
+  call delete_file(trim(outname),error)
      
   numzmat = 0
   numloc = 0
 
+  ! Here we assume a worst case scenario and allocate as many locations
+  ! as there are substructures. This is the upper bound.
   allocate(locations(sub_num(mol2)))
 
   ! For each substructure we attempt to find a quaternion
@@ -187,8 +200,11 @@ program zmat_maker
      com = sum(coords(mol2,i),dim=2)/real(atom_num(mol2,i))
      new_location = .true.
 
+     if (debug) print *,'centre of mass: ',com
+
      NUMLOOP: do j = 1, numloc
         if (sum(abs(com - locations(j)%coords)) < loc_coincident) then
+           if (debug) print *,'Same location as ',j
            ! These molecules are in the same place.
            loc = j
            new_location = .false.
@@ -209,14 +225,17 @@ program zmat_maker
      end do NUMLOOP
 
      if (new_location) then
+        if (debug) print *,'New location'
         numloc = numloc + 1
+        ! Shouldn't have to do this ....
+        nullify(locations(numloc)%zmats, locations(numloc)%number)
         if (push(locations(numloc)%zmats,iz) /= 1) stop 'Error initialising location!'
         moltype = push(locations(numloc)%number,1)
         locations(numloc)%coords = com
         loc = numloc
      end if
 
-     write(buffer,'(4I6, 4F10.6,L,3F11.6)') i, loc, iz, moltype, as_array(q), improper(q), trans
+     write(buffer,'(4I6, 4F11.6,2X,L2,3F14.6)') i, loc, iz, moltype, as_array(q), improper(q), trans
      call log(outname, trim(buffer))
 
      if (verbose) then
