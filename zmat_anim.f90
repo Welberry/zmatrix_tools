@@ -5,18 +5,22 @@ program zmat_anim
   use file_functions
   use string_functions, only: real, int, operator(.isnumber.), join
   use iso_varying_string
-  use cmdline_arguments
+  use cmdline_arguments, only: get_options, bad_options, have_args, option_exists, &
+      has_value, get_value, assignment(=), next_arg, num_args
   use fundamental_constants, only: radian
 
   implicit none
 
   !! $Log: zmat_anim.f90,v $
+  !! Revision 1.1  2006/05/10 05:07:28  aidan
+  !! Initial revision
+  !!
 
   ! Revision control software updates this character parameter.
   ! The 'ident' command can extract this version string from an
   ! object file or executable, which means one can identify which
   ! version of the module was used to compile it.
-  character(len=*), parameter :: version = "$Id: zmat_anim.f90,v 1.1 2006/05/10 05:06:50 aidan Exp aidan $"
+  character(len=*), parameter :: version = "$Id: zmat_anim.f90,v 1.1 2006/05/10 05:07:28 aidan Exp aidan $"
 
   type (mol2_object)      :: mol2
   type (zmatrix_object)   :: zmat
@@ -29,8 +33,10 @@ program zmat_anim
   integer :: i, j, zmat_entry, param_id, num_steps, error
   real    :: original_value(1), delta, inc, param(1)
   
-  type (varying_string) ::  fname, myoptions(4)
+  type (varying_string) ::  fname, myoptions(5)
   character(len=6), allocatable, dimension(:) :: atomlabels
+
+  logical :: palindrome
 
   ! These are our accepted command line options (see subroutine usage for
   ! an explanation)
@@ -39,6 +45,7 @@ program zmat_anim
   myoptions(2) = 'delta'
   myoptions(3) = 'param'
   myoptions(4) = 'nstep'
+  myoptions(5) = 'palindrome'
 
   ! This call parses the command line arguments for command line options
   call get_options(myoptions, error)
@@ -107,6 +114,8 @@ program zmat_anim
      delta = 0.1
   end if
 
+  palindrome = option_exists('palindrome')
+
   ! if (param_id /= 1) delta = delta / radian
 
   ! Grab the file name from the command line
@@ -161,9 +170,19 @@ program zmat_anim
 !!$     call write_frame(j)
 !!$  end do
 
-  do j = -num_steps/2,num_steps/2
+  ! do j = -num_steps/2,num_steps/2
+  do j = 0,num_steps
      call write_frame(j)
   end do
+
+  if (palindrome) then
+     do j = num_steps,-num_steps,-1
+        call write_frame(j)
+     end do
+     do j = -num_steps,0
+        call write_frame(j)
+     end do
+  end if
 
 contains
     
@@ -177,7 +196,7 @@ contains
     new_coords = as_xyz(zmat)
     
     print *,num(zmat)
-    print '(A,I0,A,F)','Frame number ',j,', parameter: ',param(1)
+    write(*,'(A,I0,A,F)') 'Frame number ',j,', parameter: ',param(1)
     
     do i = 1,size(new_coords,2)
        new_coords(:,i) = new_coords(:,i) + trans
@@ -205,6 +224,8 @@ contains
     write(stderr,*) '  --delta=<value> - the fraction the parameter should change (default=0.1 (of'
     write(stderr,*) '                    bond length for param=1, otherwise a fraction of 180 degrees))'
     write(stderr,*) '  --nstep=<value> - sets the number of frames (steps) in the animation (default=20)'
+    write(stderr,*) '  --palindrome    - make the loop go backwards at the end'
+    write(stderr,*) '                    which results in smoother animation'
     write(stderr,*)
 
   end subroutine usage
