@@ -15,6 +15,15 @@ program zmat_maker
   implicit none
 
   !! $Log: zmat_maker.f90,v $
+  !! Revision 1.5  2010/07/29 05:38:41  aidan
+  !! Cleaned up the module import code to avoid namespace clashes when
+  !! compiling with g95.
+  !!
+  !! Reduced loc_coincident to 1 Angstrom (from 4) as it was too high and
+  !! gave incorrect results for ClClbenzylidene aniline.
+  !!
+  !! Added some debugging and a hard-compiled debug flag.
+  !!
   !! Revision 1.4  2008/07/04 05:08:26  aidan
   !! Added the ability to automatically determine 'location' and 'type' in the
   !! unit cell and write this information to the qxyz file. Now this file will
@@ -38,7 +47,7 @@ program zmat_maker
   ! The 'ident' command can extract this version string from an
   ! object file or executable, which means one can identify which
   ! version of the module was used to compile it.
-  character(len=*), parameter :: version = "$Id: zmat_maker.f90,v 1.4 2008/07/04 05:08:26 aidan Exp $"
+  character(len=*), parameter :: version = "$Id: zmat_maker.f90,v 1.5 2010/07/29 05:38:41 aidan Exp $"
 
   type (mol2_object)    :: mol2
   type (zmatrix_object) :: zmat(100), zmat_template
